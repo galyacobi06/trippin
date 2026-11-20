@@ -127,7 +127,7 @@ export const fromEUR = (eur, cur, rates) => (cur === 'EUR' ? eur : eur * (rates[
 // ---------- Google Maps links ----------
 // Reads a place name and coordinates from a pasted Google Maps link (or plain text).
 export function parseMapsLink(text) {
-  const out = { url: '', name: '', lat: null, lon: null };
+  const out = { url: '', name: '', lat: null, lon: null, address: '', short: false };
   const s = (text || '').trim();
   const urlMatch = s.match(/https?:\/\/\S+/);
   if (urlMatch) out.url = urlMatch[0];
@@ -137,14 +137,19 @@ export function parseMapsLink(text) {
     const path = decodeURIComponent(u.pathname).replace(/\+/g, ' ');
     const place = path.match(/\/place\/([^/]+)/);
     if (place) out.name = place[1];
-    const q = u.searchParams.get('q') || u.searchParams.get('query') || u.searchParams.get('destination');
+    const q = u.searchParams.get('q') || u.searchParams.get('query') || u.searchParams.get('destination') || u.searchParams.get('name');
+    const ll = (u.searchParams.get('ll') || u.searchParams.get('coordinate') || u.searchParams.get('sll') || '').match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
+    if (ll) { out.lat = parseFloat(ll[1]); out.lon = parseFloat(ll[2]); }
     if (!out.name && q && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(q)) out.name = q;
-    const at = (u.pathname + u.search).match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || (u.href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/));
+    const at = u.href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || (u.pathname + u.search).match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     const qcoord = (q || '').match(/^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/);
     const c = at || qcoord;
-    if (c) { out.lat = parseFloat(c[1]); out.lon = parseFloat(c[2]); }
+    if (c && out.lat == null) { out.lat = parseFloat(c[1]); out.lon = parseFloat(c[2]); }
   } catch (e) { /* not a link */ }
-  if (!out.name && rest) out.name = rest.split('\n')[0].slice(0, 120);
+  const restLines = rest.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!out.name && restLines[0]) out.name = restLines[0].slice(0, 120);
+  if (restLines[1] && /\d/.test(restLines[1])) out.address = restLines[1].slice(0, 160);
+  out.short = /(^|\.)goo\.gl$|maps\.app\.goo\.gl/i.test((() => { try { return new URL(out.url).hostname; } catch (e) { return ''; } })());
   return out;
 }
 
@@ -185,4 +190,15 @@ export function getPosition() {
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 }
     );
   });
+}
+
+// Short Google Maps links (maps.app.goo.gl/...) are opened by our helper in Supabase, which returns the full link.
+export async function resolveShortLink(url) {
+  if (!navigator.onLine) return null;
+  const { getClient } = await import('./sync.js');
+  const c = await getClient();
+  if (!c) return null;
+  const { data, error } = await c.functions.invoke('resolve-link', { body: { url } });
+  if (error || !data?.url) { console.warn('resolve-link', error || data); return null; }
+  return data;
 }

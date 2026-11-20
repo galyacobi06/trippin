@@ -3,7 +3,7 @@ import { useApp, go } from '../app.jsx';
 import Icon from '../components/Icon.jsx';
 import { Sheet, Chips, Field } from './Sheets.jsx';
 import { put, saveFile } from '../lib/db.js';
-import { parseMapsLink, searchPlace, reversePlace, cityOf } from '../lib/services.js';
+import { parseMapsLink, searchPlace, reversePlace, cityOf, resolveShortLink } from '../lib/services.js';
 import { KINDS } from '../lib/util.js';
 import { dayInfo, pickDefaultDate } from '../lib/trip.js';
 
@@ -37,9 +37,21 @@ export function PlaceSheet({ place, date }) {
   });
 
   const lookUp = async () => {
-    const link = parseMapsLink(text);
+    let link = parseMapsLink(text);
     setBusy(true);
-    const base = { url: link.url, name: link.name };
+    // Short link from the Google Maps app: open it to get the name and location.
+    if (link.short && (link.lat == null || !link.name)) {
+      const res = await resolveShortLink(link.url);
+      if (res?.url) {
+        const full = parseMapsLink(res.url);
+        link = { ...link, lat: link.lat ?? full.lat, lon: link.lon ?? full.lon, name: link.name || full.name || (res.title || '').split(' · ')[0].replace(/ - Google Maps$/, '') };
+      } else if (!link.name) {
+        setBusy(false);
+        toast(navigator.onLine ? 'Couldn’t open that short link. Paste the place name with it, or use the full link.' : 'Short links need internet. Type the name instead.');
+        return;
+      }
+    }
+    const base = { url: link.url, name: link.name, address: link.address };
     try {
       if (link.lat != null) {
         const r = navigator.onLine ? await reversePlace(link.lat, link.lon) : null;
@@ -53,7 +65,7 @@ export function PlaceSheet({ place, date }) {
       } else {
         setF({ ...f, ...base, name: link.name || text });
         setStep('form');
-        if (link.url && !link.name) toast('Short links can’t be read offline. Type the name and we’ll find it.');
+
       }
     } catch (e) { setF({ ...f, ...base }); setStep('form'); }
     setBusy(false);
