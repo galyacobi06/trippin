@@ -108,7 +108,7 @@ export function guessBooking(text, fileName = '', trip) {
     const at = (text || '').match(/(?:booking|reservation|stay) at\s+([\s\S]{3,70}?)\s+(?:is|has been)\s+confirmed/i);
     const brand = lines.find((l) => /(novotel|ibis|mercure|sofitel|pullman|marriott|hilton|hyatt|radisson|holiday inn|motel one|meininger|b&b hotel|nh |premier inn|best western|intercontinental|sheraton|moxy|ruby )/i.test(l) && l.length < 60);
     const generic = lines.find((l) => /hotel|gasthof|pension|residence|apartment|inn\b|lodge/i.test(l) && l.length < 60 && !/hotel address|hotels?and|booking/i.test(l));
-    title = at ? at[1].replace(/\s+/g, ' ').trim() : ((brand || generic || '').replace(/^hotel\s+(?=\S+\s)/i, '').trim());
+    title = at ? at[1].replace(/\s+/g, ' ').trim() : brand ? brand.replace(/^hotel\s+(?=(novotel|ibis|mercure|sofitel|pullman|marriott|hilton|hyatt|radisson|holiday inn|motel one|meininger|nh |premier inn|best western|intercontinental|sheraton|moxy|ruby ))/i, '').trim() : (generic || '').trim();
   }
   if (kind === 'train' && from && to) title = `${from} → ${to}`;
   if (kind === 'flight' && from && to) title = `Flight ${from} → ${to}`;
