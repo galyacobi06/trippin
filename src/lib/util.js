@@ -26,7 +26,8 @@ export function fmtDuration(mins) {
   if (h >= 48) return `${Math.round(h / 24)} days`;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
-const untimedWeight = (x) => (x.time ? 0 : x.kind === 'hotel' ? 2 : 1);
+// Hotels go at the end of the day (you check in after the day's travel); untimed items before them.
+const untimedWeight = (x) => (x.kind === 'hotel' ? 2 : x.time ? 0 : 1);
 export const byTime = (a, b) => (untimedWeight(a) - untimedWeight(b)) || (a.time || '99:99').localeCompare(b.time || '99:99') || (a.order ?? 0) - (b.order ?? 0);
 
 // Distance in km between two points.

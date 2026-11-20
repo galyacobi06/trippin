@@ -1,5 +1,5 @@
 import { db, put, getKV, setKV, useLive, alive, uid } from './db.js';
-import { dateRange, todayStr, byTime } from './util.js';
+import { dateRange, todayStr, byTime, fmtDateLong } from './util.js';
 
 export function useTrips() {
   return alive(useLive(() => db.trips.toArray(), [], []));
@@ -97,4 +97,38 @@ export async function seedChristmasTrip() {
 
 export function sortByDateTime(a, b) {
   return (a.date || '').localeCompare(b.date || '') || (a.time || '99').localeCompare(b.time || '99');
+}
+
+// Put a booking on the plan: attach it to the matching item for that day, or create one.
+export async function attachTicketToPlan(t, items, tripId, itemId) {
+  if (!t.date) return;
+  const sub = [t.time && (t.kind === 'hotel' ? 'Check-in ' + t.time : t.time), t.kind === 'flight' && t.car, t.kind !== 'flight' && t.car && 'Car ' + t.car, t.seat && 'Seat ' + t.seat, t.kind === 'hotel' && t.endDate && 'until ' + fmtDateLong(t.endDate), t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ');
+  const linked = items.find((i) => i.ticketId === t.id) || (itemId && items.find((i) => i.id === itemId)) ||
+    items.find((i) => i.date === t.date && i.kind === t.kind && !i.ticketId && !i.deleted && (!t.who || !i.who || i.who === t.who));
+  if (linked) await put('items', { ...linked, ticketId: t.id, title: t.title || linked.title, time: t.time || linked.time, sub, date: t.date, who: t.who || linked.who || '' });
+  else await put('items', { tripId, date: t.date, time: t.time, kind: t.kind, title: t.title, sub, ticketId: t.id, who: t.who || '' });
+}
+
+// Bookings prepared by Claude: a .json file with the details and the files inside.
+export async function importBookings(json, tripId, items, saveFile, rates, toEUR) {
+  const data = JSON.parse(json);
+  if (!data || !Array.isArray(data.tickets)) throw new Error('Not a TRIPPIN bookings file');
+  let n = 0;
+  let current = [...items];
+  for (const raw of data.tickets) {
+    const { files = [], ...fields } = raw;
+    let fileId = null;
+    for (const f of files) {
+      const bin = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+      const blob = new File([bin], f.name, { type: f.type });
+      const id = await saveFile(blob);
+      if (!fileId) fileId = id;
+    }
+    const price = fields.price != null && fields.price !== '' ? Number(fields.price) : null;
+    const t = await put('tickets', { ...fields, tripId, fileId, status: 'ok', price, priceEUR: price ? toEUR(price, fields.currency || 'EUR', rates) : 0 });
+    await attachTicketToPlan(t, current, tripId);
+    current = (await db.items.where('tripId').equals(tripId).toArray()).filter((i) => !i.deleted);
+    n++;
+  }
+  return n;
 }

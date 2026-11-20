@@ -81,15 +81,20 @@ export function guessBooking(text, fileName = '', trip) {
   const times = findTimes(text || '');
 
   let confirmation = '';
-  const cm = (text || '').match(/(?:confirmation|booking|reservation|buchungs|order|ticket|pnr|dossier|référence|reference|auftrags)[\s-]*(?:number|no\.?|nr\.?|code|nummer|id|#)?\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{4,19})/i);
-  if (cm) confirmation = cm[1];
+  const spaced = (text || '').match(/(?:buchungscode|booking code|booking reference|confirmation (?:number|code)|reference code|reservation (?:number|code)|pnr)\s*[:#]?\s*(\d{3,4}(?: \d{3,4}){1,5})\b/i);
+  const cm = (text || '').match(/(?:confirmation|booking|reservation|buchungs|order|pnr|dossier|référence|reference|auftrags)[\s-]*(?:number|no\.?|nr\.?|code|nummer|reference|ref\.?|id|#)?\s*[:#]?\s*((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,19})/i);
+  if (spaced) confirmation = spaced[1];
+  else if (cm) confirmation = cm[1];
 
   const seat = ((text || '').match(/(?:seat|sitzplatz|platz|place|siège)\s*:?\s*(\d{1,3}[A-Z]?)/i) || [])[1] || '';
-  const car = ((text || '').match(/(?:coach|car|wagen|voiture)\s*:?\s*(\d{1,3})\b/i) || [])[1] || '';
+  let car = ((text || '').match(/(?:coach|car|wagen|voiture)\s*:?\s*(\d{1,3})\b/i) || [])[1] || '';
+  const fno = (text || '').match(/flight (?:number|no\.?)\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})/i);
+  if (fno) car = fno[1];
 
   let from = '', to = '';
-  const arrow = (text || '').match(/([A-ZÄÖÜ][\wäöüéèß .'-]{2,40}?)\s*(?:→|->|–>|—|›|»)\s*([A-ZÄÖÜ][\wäöüéèß .'-]{2,40})/);
-  if (arrow) { from = arrow[1].trim(); to = arrow[2].trim(); }
+  const arrow = (text || '').match(/([A-ZÄÖÜ][\wäöüéèßÄÖÜ .'-]{2,40}?)(?:\s*\([^)\n]*)?\s*(?:→|->|–>|—|›|»|>)\s*([A-ZÄÖÜ][\wäöüéèß .'-]{2,40})/);
+  const tidy = (x) => (x === x.toUpperCase() && x.length > 3 ? x.toLowerCase().replace(/(^|[\s-])\S/g, (c) => c.toUpperCase()) : x);
+  if (arrow) { from = tidy(arrow[1].trim()); to = tidy(arrow[2].trim()); }
   else {
     const ft = (text || '').match(/\bfrom\s+([A-ZÄÖÜ][\wäöüéèß .'-]{2,40}?)\s+to\s+([A-ZÄÖÜ][\wäöüéèß .'-]{2,40})/);
     if (ft) { from = ft[1].trim(); to = ft[2].trim(); }
@@ -99,6 +104,7 @@ export function guessBooking(text, fileName = '', trip) {
   const lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
   if (kind === 'hotel') title = lines.find((l) => /hotel|gasthof|pension|residence|apartment|inn\b|lodge/i.test(l) && l.length < 60) || '';
   if (kind === 'train' && from && to) title = `${from} → ${to}`;
+  if (kind === 'flight' && from && to) title = `Flight ${from} → ${to}`;
   if (kind === 'car') title = (lines.find((l) => /hertz|sixt|europcar|avis|enterprise/i.test(l)) || 'Car rental').slice(0, 50);
   if (!title) title = fileName.replace(/\.(pdf|png|jpe?g|heic)$/i, '').replace(/[_-]+/g, ' ').slice(0, 60) || 'Booking';
 
@@ -113,13 +119,13 @@ export function guessBooking(text, fileName = '', trip) {
     const ci = (text || '').match(/check[- ]?in[^\n]{0,40}?(\d{1,2}[:.]\d{2})/i);
     time = ci ? ci[1].replace('.', ':').padStart(5, '0') : '15:00';
   } else {
-    const dep = (text || '').match(/(?:departure|depart|abfahrt|départ|dep\.?|ab)\s*:?\s*(\d{1,2}[:.h]\d{2})/i);
+    const dep = (text || '').match(/(?:departure|depart|abfahrt|départ|dep\.?|ab|um|time)\s*:?\s*(\d{1,2}[:.h]\d{2})/i);
     time = dep ? dep[1].replace(/[.h]/, ':').padStart(5, '0') : (times[0]?.time || '');
   }
 
   let price = '', currency = '';
   const pm = (text || '').match(/(?:total price|price|total|preis|gesamt|prix|montant|amount)[^\d€$\n]{0,20}(EUR|CHF|USD|€|\$)?\s*([\d]{1,5}(?:[.,]\d{2})?)\s*(EUR|CHF|USD|€)?/i);
-  if (pm) {
+  if (pm && (pm[1] || pm[3])) {
     price = pm[2].replace(',', '.');
     const c = (pm[1] || pm[3] || '').toUpperCase();
     currency = c === '€' ? 'EUR' : c === '$' ? 'USD' : c;
@@ -128,4 +134,12 @@ export function guessBooking(text, fileName = '', trip) {
   const address = lines.find((l) => /\d{4,5}\s+[A-ZÄÖÜ][a-zäöüé]+/.test(l) && /(str|gasse|weg|platz|rue|street|avenue|allee|strasse|straße)/i.test(l)) || '';
 
   return { kind, title, date: datePick, time, endDate, confirmation, seat, car, from, to, address, price, currency };
+}
+
+// Calendar invites (.ics) from airlines and booking sites.
+export function icsText(raw) {
+  const unfolded = raw.replace(/\r?\n[ \t]/g, '');
+  const get = (k) => (unfolded.match(new RegExp('^' + k + '(?:;[^:]*)?:(.*)$', 'm')) || [])[1] || '';
+  const unesc = (v) => v.replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';');
+  return { summary: unesc(get('SUMMARY')), description: unesc(get('DESCRIPTION')), location: unesc(get('LOCATION')), start: get('DTSTART') };
 }

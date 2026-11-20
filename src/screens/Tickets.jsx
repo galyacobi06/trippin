@@ -61,7 +61,7 @@ export function Tickets() {
                 <span class="grow" style={{ padding: '12px 4px' }}>
                   <span class="eyebrow" style={{ fontSize: '10px', display: 'block' }}>{KINDS[t.kind]}{t.who ? ' · ' + t.who : ''}</span>
                   <span class="title ellipsis" style={{ display: 'block' }}>{t.title}</span>
-                  <span class="muted small ellipsis" style={{ display: 'block' }}>{[t.time, t.car && 'Car ' + t.car, t.seat && 'Seat ' + t.seat, t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ') || 'Tap to see details'}</span>
+                  <span class="muted small ellipsis" style={{ display: 'block' }}>{[t.time, t.car && (t.kind === 'flight' ? 'Flight ' : 'Car ') + t.car, t.seat && 'Seat ' + t.seat, t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ') || 'Tap to see details'}</span>
                 </span>
                 <span style={{ width: '70px', alignSelf: 'stretch', borderLeft: '1.5px dashed var(--line)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', color: 'var(--text)', fontSize: '11px', fontWeight: 600 }}>
                   <Icon name={t.fileId ? (files.find((f) => f.id === t.fileId)?.type?.startsWith('image') ? 'qr' : 'file') : (t.appLink ? 'link' : 'edit')} size={24} />
@@ -107,7 +107,7 @@ export function TicketView({ id }) {
       </div>
       {t.appLink && <a class="btn btn-primary btn-block" style={{ marginTop: '12px' }} href={t.appLink} target="_blank" rel="noopener"><Icon name="link" size={16} />Open in the rail/airline app</a>}
       <div class="card pad" style={{ marginTop: '14px', paddingTop: '4px', paddingBottom: '4px' }}>
-        {[['When', [t.date && fmtDateLong(t.date), t.time].filter(Boolean).join(' · ')], ['Until', t.endDate && fmtDateLong(t.endDate)], ['From → to', t.from && t.to ? `${t.from} → ${t.to}` : ''], ['Car / seat', [t.car && 'Car ' + t.car, t.seat && 'Seat ' + t.seat].filter(Boolean).join(' · ')], ['Confirmation', t.confirmation], ['Address', t.address], ['For', t.who], ['Notes', t.note]]
+        {[['When', [t.date && fmtDateLong(t.date), t.time].filter(Boolean).join(' · ')], ['Until', t.endDate && fmtDateLong(t.endDate)], ['From → to', t.from && t.to ? `${t.from} → ${t.to}` : ''], [t.kind === 'flight' ? 'Flight / seat' : 'Car / seat', [t.car && (t.kind === 'flight' ? 'Flight ' : 'Car ') + t.car, t.seat && 'Seat ' + t.seat].filter(Boolean).join(' · ')], ['Confirmation', t.confirmation], ['Address', t.address], ['For', t.who], ['Notes', t.note]]
           .filter(([, v]) => v).map(([k, v]) => <div class="kv"><div class="k">{k}</div><div class="v">{v}</div></div>)}
       </div>
       <button class="btn btn-ghost btn-block" style={{ marginTop: '14px', color: 'var(--accent-text)' }} onClick={async () => { if (confirm('Delete this ticket?')) { await remove('tickets', t.id); history.back(); } }}><Icon name="trash" size={16} />Delete ticket</button>

@@ -3,10 +3,10 @@ import { useApp } from '../app.jsx';
 import Icon from '../components/Icon.jsx';
 import { Sheet, Chips, Field } from './Sheets.jsx';
 import { put, saveFile, db } from '../lib/db.js';
-import { pdfText, guessBooking } from '../lib/parse.js';
+import { pdfText, guessBooking, icsText } from '../lib/parse.js';
 import { getRates, toEUR } from '../lib/services.js';
-import { KINDS, BOOKING_KINDS, dateRange, localCurrency, fmtDateLong } from '../lib/util.js';
-import { dayInfo } from '../lib/trip.js';
+import { KINDS, BOOKING_KINDS, dateRange, localCurrency } from '../lib/util.js';
+import { dayInfo, attachTicketToPlan, importBookings } from '../lib/trip.js';
 
 const empty = { kind: 'train', title: '', date: '', time: '', endDate: '', from: '', to: '', car: '', seat: '', confirmation: '', address: '', price: '', currency: 'EUR', who: '', appLink: '', note: '' };
 
@@ -22,8 +22,26 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
     const file = e.currentTarget.files?.[0];
     if (!file) return;
     setBusy(true);
-    const fileId = await saveFile(file);
+    if (/\.json$/i.test(file.name)) {
+      try {
+        const n = await importBookings(await file.text(), trip.id, items, saveFile, await getRates(), toEUR);
+        toast(`Added ${n} booking${n === 1 ? '' : 's'} to Tickets and the plan`);
+        close();
+      } catch (err) { toast(err.message); setBusy(false); }
+      return;
+    }
     let guess = {};
+    if (/\.ics$/i.test(file.name) || /calendar/i.test(file.type)) {
+      const ics = icsText(await file.text());
+      guess = guessBooking([ics.summary, ics.description, ics.location].join('\n'), file.name, trip);
+      const merged = { ...f, ...Object.fromEntries(Object.entries(guess).filter(([, v]) => v)), note: ics.description.slice(0, 500), fileName: file.name };
+      const draft = await put('tickets', { ...merged, tripId: trip.id, status: 'review' });
+      setF({ ...merged, id: draft.id });
+      setBusy(false);
+      setStep('form');
+      return;
+    }
+    const fileId = await saveFile(file);
     if (/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)) {
       try { guess = guessBooking(await pdfText(file), file.name, trip); } catch (err) { console.warn(err); guess = guessBooking('', file.name, trip); }
     } else guess = guessBooking('', file.name, trip);
@@ -40,14 +58,7 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
     const rates = await getRates();
     const price = f.price === '' ? null : Number(String(f.price).replace(',', '.'));
     const t = await put('tickets', { ...f, tripId: trip.id, status: 'ok', price, priceEUR: price ? toEUR(price, f.currency, rates) : 0 });
-    // Put it on the plan: attach to the matching item for that day, or create one.
-    const sub = [t.time && (t.kind === 'hotel' ? 'Check-in ' + t.time : t.time), t.car && 'Car ' + t.car, t.seat && 'Seat ' + t.seat, t.kind === 'hotel' && t.endDate && 'until ' + fmtDateLong(t.endDate), t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ');
-    const linked = items.find((i) => i.ticketId === t.id) || (itemId && items.find((i) => i.id === itemId)) ||
-      items.find((i) => i.date === t.date && i.kind === t.kind && !i.ticketId && (!t.who || !i.who || i.who === t.who));
-    if (t.date) {
-      if (linked) await put('items', { ...linked, ticketId: t.id, title: t.title || linked.title, time: t.time || linked.time, sub, date: t.date, who: t.who || linked.who || '' });
-      else await put('items', { tripId: trip.id, date: t.date, time: t.time, kind: t.kind, title: t.title, sub, ticketId: t.id, who: t.who || '' });
-    }
+    await attachTicketToPlan(t, items, trip.id, itemId);
     toast('Saved to Tickets and the plan');
     close();
   };
@@ -55,10 +66,10 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
   if (step === 'pick') {
     return (
       <Sheet title="Add a booking">
-        <p class="muted" style={{ marginTop: '6px' }}>Pick the confirmation PDF or a screenshot of the ticket. On iPhone: save the PDF from the email to Files first, then pick it here.</p>
+        <p class="muted" style={{ marginTop: '6px' }}>Pick the confirmation PDF, a calendar file (.ics) or a screenshot of the ticket. On iPhone: save the PDF from the email to Files first, then pick it here.</p>
         <label class="btn btn-primary btn-block" style={{ height: '54px', marginTop: '10px' }}>
           <Icon name="upload" size={18} />{busy ? 'Reading…' : 'Choose PDF or screenshot'}
-          <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={pick} disabled={busy} />
+          <input type="file" accept="application/pdf,image/*,.ics,text/calendar,.json,application/json" style={{ display: 'none' }} onChange={pick} disabled={busy} />
         </label>
         <button class="btn btn-block" style={{ marginTop: '10px' }} onClick={() => setStep('form')}>Type the details instead</button>
         <p class="muted small" style={{ marginTop: '12px' }}>For tickets that only live in an app (some ÖBB / SBB / SNCF tickets), take a screenshot, or type the details and add the app link.</p>
