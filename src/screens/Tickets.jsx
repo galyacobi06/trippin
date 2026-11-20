@@ -82,13 +82,20 @@ export function TicketView({ id }) {
   const t = data.tickets.find((x) => x.id === id);
   const file = useLive(() => (t?.fileId ? db.files.get(t.fileId) : null), [t?.fileId], null);
   const [url, setUrl] = useState(null);
+  const [extra, setExtra] = useState([]);
   const [state, setState] = useState('loading');
   useEffect(() => {
-    let u = null;
+    let urls = [];
     if (!t?.fileId) { setState('none'); return; }
-    fileURL(t.fileId).then((x) => { u = x; setUrl(x); setState(x ? 'ok' : 'missing'); });
-    return () => u && URL.revokeObjectURL(u);
-  }, [t?.fileId]);
+    (async () => {
+      const x = await fileURL(t.fileId);
+      urls.push(x); setUrl(x); setState(x ? 'ok' : 'missing');
+      const more = [];
+      for (const id of (t.fileIds || []).slice(1)) { const u = await fileURL(id); if (u) { more.push(u); urls.push(u); } }
+      setExtra(more);
+    })();
+    return () => urls.forEach((u) => u && URL.revokeObjectURL(u));
+  }, [t?.fileId, (t?.fileIds || []).join()]);
   if (!t) return <div class="screen"><Header title="Ticket" /><div class="empty">This ticket was removed.</div></div>;
   const isImg = file?.type?.startsWith('image');
   return (
@@ -96,7 +103,7 @@ export function TicketView({ id }) {
       <Header title={t.title} eyebrow={KINDS[t.kind] + (t.date ? ' · ' + fmtDateLong(t.date) : '')}
         right={<button class="icon-btn" aria-label="Edit ticket" onClick={() => open('ticket', { ticket: t })}><Icon name="edit" /></button>} />
       <div style={{ marginTop: '14px' }}>
-        {state === 'ok' && (isImg ? <img class="viewer-img" src={url} alt={'Ticket: ' + t.title} /> : (
+        {state === 'ok' && (isImg ? <div class="stack"><img class="viewer-img" src={url} alt={'Ticket: ' + t.title} />{extra.map((u, i) => <img class="viewer-img" src={u} alt={`${t.title}, page ${i + 2}`} />)}</div> : (
           <>
             <iframe class="viewer" src={url} title={'Ticket PDF: ' + t.title} />
             <a class="btn btn-block" style={{ marginTop: '10px' }} href={url} target="_blank" rel="noopener"><Icon name="file" size={16} />Open full screen</a>

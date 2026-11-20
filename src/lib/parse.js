@@ -49,6 +49,8 @@ export function findDates(text, defaultYear) {
   const r4 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/g;
   while ((m = r4.exec(text))) { const mo = MONTHS[m[1].toLowerCase()]; if (mo) add(m[3], mo, m[2], m.index); }
   if (defaultYear) {
+    const r6 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2})\b(?!\s*[:.]\d)/g;
+    while ((m = r6.exec(text))) { const mo = MONTHS[m[1].toLowerCase()]; if (mo && m[1].length >= 3 && !/^may$/i.test(m[1])) add(defaultYear, mo, m[2], m.index); }
     const r5 = /\b(\d{1,2})\.?\s+([A-Za-zäéû]{3,10})\b(?!\.?,?\s+\d{4})/g;
     while ((m = r5.exec(text))) { const mo = MONTHS[m[2].toLowerCase()]; if (mo) add(defaultYear, mo, m[1], m.index); }
   }
@@ -102,7 +104,12 @@ export function guessBooking(text, fileName = '', trip) {
 
   let title = '';
   const lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-  if (kind === 'hotel') title = lines.find((l) => /hotel|gasthof|pension|residence|apartment|inn\b|lodge/i.test(l) && l.length < 60) || '';
+  if (kind === 'hotel') {
+    const at = (text || '').match(/(?:booking|reservation|stay) at\s+([\s\S]{3,70}?)\s+(?:is|has been)\s+confirmed/i);
+    const brand = lines.find((l) => /(novotel|ibis|mercure|sofitel|pullman|marriott|hilton|hyatt|radisson|holiday inn|motel one|meininger|b&b hotel|nh |premier inn|best western|intercontinental|sheraton|moxy|ruby )/i.test(l) && l.length < 60);
+    const generic = lines.find((l) => /hotel|gasthof|pension|residence|apartment|inn\b|lodge/i.test(l) && l.length < 60 && !/hotel address|hotels?and|booking/i.test(l));
+    title = at ? at[1].replace(/\s+/g, ' ').trim() : ((brand || generic || '').replace(/^hotel\s+(?=\S+\s)/i, '').trim());
+  }
   if (kind === 'train' && from && to) title = `${from} → ${to}`;
   if (kind === 'flight' && from && to) title = `Flight ${from} → ${to}`;
   if (kind === 'car') title = (lines.find((l) => /hertz|sixt|europcar|avis|enterprise/i.test(l)) || 'Car rental').slice(0, 50);
@@ -116,7 +123,7 @@ export function guessBooking(text, fileName = '', trip) {
 
   let time = '';
   if (kind === 'hotel') {
-    const ci = (text || '').match(/check[- ]?in[^\n]{0,40}?(\d{1,2}[:.]\d{2})/i);
+    const ci = (text || '').match(/check[- ]?in[\s\S]{0,40}?\b(\d{1,2}[:.]\d{2})\b/i);
     time = ci ? ci[1].replace('.', ':').padStart(5, '0') : '15:00';
   } else {
     const dep = (text || '').match(/(?:departure|depart|abfahrt|départ|dep\.?|ab|um|time)\s*:?\s*(\d{1,2}[:.h]\d{2})/i);
@@ -124,14 +131,25 @@ export function guessBooking(text, fileName = '', trip) {
   }
 
   let price = '', currency = '';
-  const pm = (text || '').match(/(?:total price|price|total|preis|gesamt|prix|montant|amount)[^\d€$\n]{0,20}?(EUR|CHF|USD|€|\$)?\s*([\d]{1,5}(?:[.,]\d{2})?)\s*(EUR|CHF|USD|€)?/i);
-  if (pm && (pm[1] || pm[3])) {
+  const priceRe = /(?:total due|total price|price|total|preis|gesamtbetrag|gesamt|prix|montant|amount)[^\d€$\n]{0,20}?(EUR|CHF|USD|€|\$)?\s*([\d]{1,5}(?:[.,]\d{2})?)\s*(EUR|CHF|USD|€)?/gi;
+  for (const pm of (text || '').matchAll(priceRe)) {
+    if (!(pm[1] || pm[3])) continue;
     price = pm[2].replace(',', '.');
     const c = (pm[1] || pm[3] || '').toUpperCase();
     currency = c === '€' ? 'EUR' : c === '$' ? 'USD' : c;
+    break;
   }
 
-  const address = lines.find((l) => /\d{4,5}\s+[A-ZÄÖÜ][a-zäöüé]+/.test(l) && /(str|gasse|weg|platz|rue|street|avenue|allee|strasse|straße)/i.test(l)) || '';
+
+  let address = lines.find((l) => /\d{4,5}\s+[A-ZÄÖÜ][a-zäöüé]+/.test(l) && /(str|gasse|weg|platz|rue|street|avenue|allee|strasse|straße)/i.test(l)) || '';
+
+  if (!address) {
+    const st = (text || '').match(/([A-ZÄÖÜ][\wäöüß-]*(?:strasse|straße|gasse|weg|platz|allee|ring|kai|street|road|avenue)|(?:rue|avenue|boulevard|place|quai) [\wéèàç' -]{2,30}?)\b[\s\S]{0,25}?\b(\d{1,4}[a-z]?)\b/i);
+    if (st) {
+      const pc = (text || '').slice(st.index, st.index + 80).match(/\b(\d{4,5})\b(?!\s*(?:miles|%))/);
+      address = st[1] + ' ' + st[2] + (pc && pc[1] !== st[2] ? ', ' + pc[1] : '');
+    }
+  }
 
   return { kind, title, date: datePick, time, endDate, confirmation, seat, car, from, to, address, price, currency };
 }

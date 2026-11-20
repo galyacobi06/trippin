@@ -21,7 +21,7 @@ function precacheServiceWorker() {
         }
       };
       walk(outDir);
-      const list = files.filter((f) => f !== './sw.js' && !f.endsWith('.map'));
+      const list = files.filter((f) => f !== './sw.js' && !f.endsWith('.map') && !f.startsWith('./ocr/') && !/tesseract|pdf\.worker/.test(f));
       const version = Date.now().toString(36);
       const swPath = join(outDir, 'sw.js');
       const sw = readFileSync(swPath, 'utf8')

@@ -4,6 +4,7 @@ import Icon from '../components/Icon.jsx';
 import { Sheet, Chips, Field } from './Sheets.jsx';
 import { put, saveFile, db } from '../lib/db.js';
 import { pdfText, guessBooking, icsText } from '../lib/parse.js';
+import { readImages } from '../lib/ocr.js';
 import { getRates, toEUR } from '../lib/services.js';
 import { KINDS, BOOKING_KINDS, dateRange, localCurrency } from '../lib/util.js';
 import { dayInfo, attachTicketToPlan, importBookings } from '../lib/trip.js';
@@ -16,12 +17,37 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
   const [step, setStep] = useState(ticket ? 'form' : 'pick');
   const [f, setF] = useState(ticket ? { ...empty, ...ticket, price: ticket.price ?? '' } : { ...empty, date: date || '', kind: kind || 'train', currency: localCurrency(dayInfo(days, date || trip.start).country) });
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.currentTarget ? e.currentTarget.value : e });
 
   const pick = async (e) => {
-    const file = e.currentTarget.files?.[0];
+    const picked = [...(e.currentTarget.files || [])];
+    const file = picked[0];
     if (!file) return;
     setBusy(true);
+    // One or more screenshots of the same booking: read the text in them.
+    if (picked.every((x) => /^image\//.test(x.type) || /\.(png|jpe?g|heic|webp)$/i.test(x.name))) {
+      const fileIds = [];
+      for (const x of picked) fileIds.push(await saveFile(x));
+      let guess = {};
+      try {
+        setProgress('Getting the reader ready…');
+        const text = await readImages(picked, (m) => setProgress(m.status === 'recognizing text' ? `Reading… ${Math.round((m.progress || 0) * 100)}%` : (m.status || '').startsWith('Reading') ? m.status : 'Getting the reader ready…'));
+        guess = guessBooking(text, file.name, trip);
+      } catch (err) {
+        console.warn(err);
+        toast(navigator.onLine ? 'Couldn’t read the screenshot. Fill in the details.' : 'The first screenshot reading needs internet once. Fill in the details for now.');
+      }
+      if (/^IMG|screenshot/i.test(guess.title || '')) guess.title = '';
+      const merged = { ...f, ...Object.fromEntries(Object.entries(guess).filter(([, v]) => v)), fileId: fileIds[0], fileIds, fileName: picked.length > 1 ? `${picked.length} screenshots` : file.name };
+      if (kind) merged.kind = kind;
+      if (date && !guess.date) merged.date = date;
+      const draft = await put('tickets', { ...merged, tripId: trip.id, status: 'review' });
+      setF({ ...merged, id: draft.id });
+      setBusy(false); setProgress('');
+      setStep('form');
+      return;
+    }
     if (/\.json$/i.test(file.name)) {
       try {
         const n = await importBookings(await file.text(), trip.id, items, saveFile, await getRates(), toEUR);
@@ -66,10 +92,10 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
   if (step === 'pick') {
     return (
       <Sheet title="Add a booking">
-        <p class="muted" style={{ marginTop: '6px' }}>Pick the confirmation PDF, a calendar file (.ics) or a screenshot of the ticket. On iPhone: save the PDF from the email to Files first, then pick it here.</p>
+        <p class="muted" style={{ marginTop: '6px' }}>Pick the confirmation PDF, a calendar file (.ics), or one or more screenshots of the same booking. The details are read for you to check.</p>
         <label class="btn btn-primary btn-block" style={{ height: '54px', marginTop: '10px' }}>
-          <Icon name="upload" size={18} />{busy ? 'Reading…' : 'Choose PDF or screenshot'}
-          <input type="file" accept="application/pdf,image/*,.ics,text/calendar,.json,application/json" style={{ display: 'none' }} onChange={pick} disabled={busy} />
+          <Icon name="upload" size={18} />{busy ? (progress || 'Reading…') : 'Choose PDF or screenshots'}
+          <input type="file" accept="application/pdf,image/*,.ics,text/calendar,.json,application/json" style={{ display: 'none' }} multiple onChange={pick} disabled={busy} />
         </label>
         <button class="btn btn-block" style={{ marginTop: '10px' }} onClick={() => setStep('form')}>Type the details instead</button>
         <p class="muted small" style={{ marginTop: '12px' }}>For tickets that only live in an app (some ÖBB / SBB / SNCF tickets), take a screenshot, or type the details and add the app link.</p>

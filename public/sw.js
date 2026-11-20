@@ -26,7 +26,11 @@ self.addEventListener('fetch', (event) => {
       event.respondWith(fetch(req).catch(() => caches.match('./', { ignoreSearch: true, ignoreVary: true })));
       return;
     }
-    event.respondWith(caches.match(req, { ignoreSearch: true, ignoreVary: true }).then((hit) => hit || fetch(req)));
+    event.respondWith(caches.match(req, { ignoreSearch: true, ignoreVary: true }).then((hit) => hit || fetch(req).then((res) => {
+      // Big tools (screenshot reader, PDF reader) are saved the first time they're used.
+      if (res.ok && /\/ocr\/|tesseract|pdf\.worker/.test(url.pathname)) { const copy = res.clone(); caches.open(RUNTIME).then((c) => c.put(req, copy)); }
+      return res;
+    })));
     return;
   }
 
