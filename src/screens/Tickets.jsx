@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { useApp, go } from '../app.jsx';
 import Icon from '../components/Icon.jsx';
 import { Header } from '../components/bits.jsx';
-import { fmtDateLong, KINDS, todayStr } from '../lib/util.js';
+import { fmtDateLong, KINDS, todayStr, money } from '../lib/util.js';
 import { sortByDateTime } from '../lib/trip.js';
 import { db, fileURL, useLive, remove } from '../lib/db.js';
 
@@ -59,7 +59,7 @@ export function Tickets() {
                   <span style={{ width: '42px', height: '42px', borderRadius: '21px', background: COLOR[t.kind] || 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={t.kind} size={20} /></span>
                 </span>
                 <span class="grow" style={{ padding: '12px 4px' }}>
-                  <span class="eyebrow" style={{ fontSize: '10px', display: 'block' }}>{KINDS[t.kind]}{t.who ? ' · ' + t.who : ''}</span>
+                  <span class="eyebrow" style={{ fontSize: '10px', display: 'block' }}>{KINDS[t.kind]}{t.who ? ' · ' + t.who : ''}{t.price ? ' · ' + money(t.price, t.currency || 'EUR') : ''}</span>
                   <span class="title ellipsis" style={{ display: 'block' }}>{t.title}</span>
                   <span class="muted small ellipsis" style={{ display: 'block' }}>{[t.time, t.car && (t.kind === 'flight' ? 'Flight ' : 'Car ') + t.car, t.seat && 'Seat ' + t.seat, t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ') || 'Tap to see details'}</span>
                 </span>
@@ -114,7 +114,7 @@ export function TicketView({ id }) {
       </div>
       {t.appLink && <a class="btn btn-primary btn-block" style={{ marginTop: '12px' }} href={t.appLink} target="_blank" rel="noopener"><Icon name="link" size={16} />Open in the rail/airline app</a>}
       <div class="card pad" style={{ marginTop: '14px', paddingTop: '4px', paddingBottom: '4px' }}>
-        {[['When', [t.date && fmtDateLong(t.date), t.time].filter(Boolean).join(' · ')], ['Until', t.endDate && fmtDateLong(t.endDate)], ['From → to', t.from && t.to ? `${t.from} → ${t.to}` : ''], [t.kind === 'flight' ? 'Flight / seat' : 'Car / seat', [t.car && (t.kind === 'flight' ? 'Flight ' : 'Car ') + t.car, t.seat && 'Seat ' + t.seat].filter(Boolean).join(' · ')], ['Confirmation', t.confirmation], ['Address', t.address], ['For', t.who], ['Notes', t.note]]
+        {[['Price', t.price ? money(t.price, t.currency || 'EUR', 2) : ''], ['When', [t.date && fmtDateLong(t.date), t.time].filter(Boolean).join(' · ')], ['Until', t.endDate && fmtDateLong(t.endDate)], ['From → to', t.from && t.to ? `${t.from} → ${t.to}` : ''], [t.kind === 'flight' ? 'Flight / seat' : 'Car / seat', [t.car && (t.kind === 'flight' ? 'Flight ' : 'Car ') + t.car, t.seat && 'Seat ' + t.seat].filter(Boolean).join(' · ')], ['Confirmation', t.confirmation], ['Address', t.address], ['For', t.who], ['Notes', t.note]]
           .filter(([, v]) => v).map(([k, v]) => <div class="kv"><div class="k">{k}</div><div class="v">{v}</div></div>)}
       </div>
       <button class="btn btn-ghost btn-block" style={{ marginTop: '14px', color: 'var(--accent-text)' }} onClick={async () => { if (confirm('Delete this ticket?')) { await remove('tickets', t.id); history.back(); } }}><Icon name="trash" size={16} />Delete ticket</button>
