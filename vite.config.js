@@ -32,8 +32,11 @@ function precacheServiceWorker() {
   };
 }
 
+const BUILD = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
 export default defineConfig({
   base: './',
+  define: { __BUILD__: JSON.stringify(BUILD) },
   plugins: [preact(), precacheServiceWorker()],
   build: { target: 'es2020', chunkSizeWarningLimit: 2000 }
 });

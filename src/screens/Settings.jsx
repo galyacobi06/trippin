@@ -104,7 +104,7 @@ export function Settings() {
         <NewTrip />
       </div>
       <TripEdit />
-      <div class="muted small" style={{ textAlign: 'center', marginTop: '24px' }}>TRIPPIN · works offline · weather Open-Meteo · places OpenStreetMap · photos Wikimedia</div>
+      <div class="muted small" style={{ textAlign: 'center', marginTop: '24px' }}>TRIPPIN version {__BUILD__} · works offline · weather Open-Meteo · places OpenStreetMap · photos Wikimedia</div>
     </div>
   );
 }

@@ -18,6 +18,7 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
   const [f, setF] = useState(ticket ? { ...empty, ...ticket, price: ticket.price ?? '' } : { ...empty, date: date || '', kind: kind || 'train', currency: localCurrency(dayInfo(days, date || trip.start).country) });
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
+  const [readText, setReadText] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.currentTarget ? e.currentTarget.value : e });
 
   const pick = async (e) => {
@@ -33,6 +34,7 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
       try {
         setProgress('Getting the reader ready…');
         const text = await readImages(picked, (m) => setProgress(m.status === 'recognizing text' ? `Reading… ${Math.round((m.progress || 0) * 100)}%` : (m.status || '').startsWith('Reading') ? m.status : 'Getting the reader ready…'));
+        setReadText(text);
         guess = guessBooking(text, file.name, trip);
       } catch (err) {
         console.warn(err);
@@ -69,7 +71,7 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
     }
     const fileId = await saveFile(file);
     if (/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)) {
-      try { guess = guessBooking(await pdfText(file), file.name, trip); } catch (err) { console.warn(err); guess = guessBooking('', file.name, trip); }
+      try { const txt = await pdfText(file); setReadText(txt); guess = guessBooking(txt, file.name, trip); } catch (err) { console.warn(err); guess = guessBooking('', file.name, trip); }
     } else guess = guessBooking('', file.name, trip);
     const merged = { ...f, ...Object.fromEntries(Object.entries(guess).filter(([, v]) => v)), fileId, fileName: file.name };
     if (kind) merged.kind = kind;
@@ -137,6 +139,12 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
       </Field>
       <Field label="App link (optional)" id="tl"><input id="tl" class="input" value={f.appLink} onInput={set('appLink')} placeholder="https://…" /></Field>
       <Field label="Notes" id="tno"><textarea id="tno" class="input" value={f.note} onInput={set('note')} /></Field>
+      {readText && (
+        <details style={{ marginTop: '14px' }}>
+          <summary class="small muted" style={{ cursor: 'pointer', minHeight: '32px' }}>What the app read (to help fix mistakes)</summary>
+          <pre class="soft small" style={{ whiteSpace: 'pre-wrap', padding: '10px 12px', maxHeight: '220px', overflow: 'auto', fontFamily: 'inherit' }}>{readText.trim()}</pre>
+        </details>
+      )}
       <button class="btn btn-primary btn-block" style={{ marginTop: '16px', height: '54px' }} disabled={!f.title} onClick={save}>{ticket ? 'Save' : 'Looks right, save'}</button>
     </Sheet>
   );
