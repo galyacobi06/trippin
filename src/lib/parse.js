@@ -124,7 +124,7 @@ export function guessBooking(text, fileName = '', trip) {
   }
 
   let price = '', currency = '';
-  const pm = (text || '').match(/(?:total price|price|total|preis|gesamt|prix|montant|amount)[^\d€$\n]{0,20}(EUR|CHF|USD|€|\$)?\s*([\d]{1,5}(?:[.,]\d{2})?)\s*(EUR|CHF|USD|€)?/i);
+  const pm = (text || '').match(/(?:total price|price|total|preis|gesamt|prix|montant|amount)[^\d€$\n]{0,20}?(EUR|CHF|USD|€|\$)?\s*([\d]{1,5}(?:[.,]\d{2})?)\s*(EUR|CHF|USD|€)?/i);
   if (pm && (pm[1] || pm[3])) {
     price = pm[2].replace(',', '.');
     const c = (pm[1] || pm[3] || '').toUpperCase();
