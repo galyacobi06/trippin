@@ -103,8 +103,13 @@ export function sortByDateTime(a, b) {
 export async function attachTicketToPlan(t, items, tripId, itemId) {
   if (!t.date) return;
   const sub = [t.time && (t.kind === 'hotel' ? 'Check-in ' + t.time : t.time), t.kind === 'flight' && t.car, t.kind !== 'flight' && t.car && 'Car ' + t.car, t.seat && 'Seat ' + t.seat, t.kind === 'hotel' && t.endDate && 'until ' + fmtDateLong(t.endDate), t.confirmation && '#' + t.confirmation].filter(Boolean).join(' · ');
-  const linked = items.find((i) => i.ticketId === t.id) || (itemId && items.find((i) => i.id === itemId)) ||
-    items.find((i) => i.date === t.date && i.kind === t.kind && !i.ticketId && !i.deleted && (!t.who || !i.who || i.who === t.who));
+  // Pick the best matching placeholder: same day and type, and words in common (e.g. "Bangkok").
+  const words = `${t.title} ${t.from} ${t.to}`.toLowerCase().match(/[a-zäöüéè]{4,}/g) || [];
+  const score = (i) => words.filter((w) => i.title.toLowerCase().includes(w)).length;
+  const candidates = items.filter((i) => i.date === t.date && i.kind === t.kind && !i.ticketId && !i.deleted && (!t.who || !i.who || i.who === t.who))
+    .sort((a, b) => score(b) - score(a));
+  const linked = items.find((i) => i.ticketId === t.id) || (itemId && items.find((i) => i.id === itemId)) || candidates[0];
+  if (linked?.who && !t.who) { t = { ...t, who: linked.who }; await put('tickets', t); }
   if (linked) await put('items', { ...linked, ticketId: t.id, title: t.title || linked.title, time: t.time || linked.time, sub, date: t.date, who: t.who || linked.who || '' });
   else await put('items', { tripId, date: t.date, time: t.time, kind: t.kind, title: t.title, sub, ticketId: t.id, who: t.who || '' });
 }

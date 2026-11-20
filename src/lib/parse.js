@@ -65,6 +65,32 @@ export function findTimes(text) {
   return out;
 }
 
+
+const AIRPORTS = {
+  TLV: 'Tel Aviv', VIE: 'Vienna', CDG: 'Paris', ORY: 'Paris', BVA: 'Paris', BKK: 'Bangkok', DMK: 'Bangkok', ZRH: 'Zurich', GVA: 'Geneva', BSL: 'Basel', SZG: 'Salzburg',
+  INN: 'Innsbruck', MUC: 'Munich', FRA: 'Frankfurt', SXB: 'Strasbourg', LHR: 'London', LGW: 'London', STN: 'London', AMS: 'Amsterdam', FCO: 'Rome', MXP: 'Milan', LIN: 'Milan',
+  BCN: 'Barcelona', MAD: 'Madrid', LIS: 'Lisbon', IST: 'Istanbul', SAW: 'Istanbul', ATH: 'Athens', LCA: 'Larnaca', PFO: 'Paphos', DXB: 'Dubai', AUH: 'Abu Dhabi', DOH: 'Doha',
+  JFK: 'New York', EWR: 'New York', BER: 'Berlin', PRG: 'Prague', BUD: 'Budapest', WAW: 'Warsaw', CPH: 'Copenhagen', BRU: 'Brussels', NCE: 'Nice', LYS: 'Lyon', MRS: 'Marseille',
+  HKT: 'Phuket', CNX: 'Chiang Mai', USM: 'Koh Samui', SIN: 'Singapore', HKG: 'Hong Kong', NRT: 'Tokyo', HND: 'Tokyo', DEL: 'Delhi', BOM: 'Mumbai', ETM: 'Eilat'
+};
+const AIRLINES = { OS: 'Austrian Airlines', LX: 'SWISS', LH: 'Lufthansa', LY: 'El Al', TG: 'Thai Airways', AF: 'Air France', KL: 'KLM', BA: 'British Airways', IZ: 'Arkia', '6H': 'Israir', U2: 'easyJet', FR: 'Ryanair', W6: 'Wizz Air', TK: 'Turkish Airlines', EK: 'Emirates', QR: 'Qatar Airways', EY: 'Etihad' };
+export const airportCity = (code) => AIRPORTS[(code || '').toUpperCase()] || '';
+
+// Apps often show labels on one line and their values on the next ("Flight  Booking Ref.  Class" / "TG933  5M9P7O  Business").
+function columns(lines) {
+  const out = {};
+  const LABELS = [['flight', /^flight(?: no\.?| number)?$/i], ['ref', /^(?:booking ref\.?|booking reference|ref(?:erence)?\.?|pnr|confirmation)$/i], ['class', /^(?:class|cabin)$/i], ['seat', /^seats?$/i], ['gate', /^gate$/i], ['coach', /^(?:coach|car|wagen)$/i], ['terminal', /^terminal$/i]];
+  for (let i = 0; i < lines.length - 1; i++) {
+    const parts = lines[i].split(/\s{2,}|\t| (?=(?:Booking|Class|Seat|Gate|Coach|Terminal|Cabin)\b)/).map((x) => x.trim()).filter(Boolean);
+    const keys = parts.map((p) => (LABELS.find(([, re]) => re.test(p)) || [])[0]);
+    if (keys.length < 2 || keys.some((k) => !k)) continue;
+    const vals = lines[i + 1].split(/\s+/).filter((v) => v.length > 0 && !/^[|l]$/.test(v));
+    if (vals.length < keys.length) continue;
+    keys.forEach((k, j) => { if (!out[k]) out[k] = vals[j]; });
+  }
+  return out;
+}
+
 const has = (t, words) => words.some((w) => t.includes(w));
 
 export function guessBooking(text, fileName = '', trip) {
@@ -88,7 +114,7 @@ export function guessBooking(text, fileName = '', trip) {
   if (spaced) confirmation = spaced[1];
   else if (cm) confirmation = cm[1];
 
-  const seat = ((text || '').match(/(?:seat|sitzplatz|platz|place|siège)\s*:?\s*(\d{1,3}[A-Z]?)/i) || [])[1] || '';
+  let seat = ((text || '').match(/(?:seat|sitzplatz|platz|place|siège)\s*:?\s*(\d{1,3}[A-Z]?)/i) || [])[1] || '';
   let car = ((text || '').match(/(?:coach|car|wagen|voiture)\s*:?\s*(\d{1,3})\b/i) || [])[1] || '';
   const fno = (text || '').match(/flight (?:number|no\.?)\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})/i);
   if (fno) car = fno[1];
@@ -102,8 +128,27 @@ export function guessBooking(text, fileName = '', trip) {
     if (ft) { from = ft[1].trim(); to = ft[2].trim(); }
   }
 
-  let title = '';
   const lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const col = columns(lines);
+  let note = '';
+  if (kind === 'flight' || col.flight) {
+    if (col.flight) car = col.flight;
+    if (col.ref && !confirmation) confirmation = col.ref;
+    if (col.ref && /^[A-Z0-9]{5,8}$/i.test(col.ref)) confirmation = col.ref;
+    if (col.seat) seat = col.seat;
+    // Airport codes, e.g. "CDG ... BKK".
+    const codes = [];
+    for (const l of lines) for (const m2 of l.matchAll(/\b([A-Z]{3})\b/g)) if (AIRPORTS[m2[1]] && !codes.includes(m2[1])) codes.push(m2[1]);
+    if (codes.length >= 2 && (!from || !to || /^[A-Z]{3}$/.test(from))) { from = `${AIRPORTS[codes[0]]} (${codes[0]})`; to = `${AIRPORTS[codes[1]]} (${codes[1]})`; }
+    else if (/^[A-Z]{3}$/.test(from) && AIRPORTS[from]) { from = `${AIRPORTS[from]} (${from})`; if (AIRPORTS[to]) to = `${AIRPORTS[to]} (${to})`; }
+    const term = (text || '').match(/terminal\s*:?\s*([0-9A-Z]{1,2})\b/i);
+    if (term && from && !/terminal/i.test(from)) from += `, Terminal ${term[1]}`;
+    const airline = AIRLINES[(car.match(/^([A-Z0-9]{2})/) || [])[1]];
+    const arr = (text || '').match(/(?:arrival|arrives?|lands?)[\s\S]{0,60}?\b(\d{1,2}:\d{2})\b/i);
+    note = [airline && `${airline} ${car}`, col.class && col.class + ' class', arr && 'lands ' + arr[1]].filter(Boolean).join(' · ');
+    if (kind !== 'flight') kind = 'flight';
+  }
+  let title = '';
   if (kind === 'hotel') {
     const at = (text || '').match(/(?:booking|reservation|stay) at\s+([\s\S]{3,70}?)\s+(?:is|has been)\s+confirmed/i);
     const brand = lines.find((l) => /(novotel|ibis|mercure|sofitel|pullman|marriott|hilton|hyatt|radisson|holiday inn|motel one|meininger|b&b hotel|nh |premier inn|best western|intercontinental|sheraton|moxy|ruby )/i.test(l) && l.length < 60);
@@ -111,9 +156,13 @@ export function guessBooking(text, fileName = '', trip) {
     title = at ? at[1].replace(/\s+/g, ' ').trim() : brand ? brand.replace(/^hotel\s+(?=(novotel|ibis|mercure|sofitel|pullman|marriott|hilton|hyatt|radisson|holiday inn|motel one|meininger|nh |premier inn|best western|intercontinental|sheraton|moxy|ruby ))/i, '').trim() : (generic || '').trim();
   }
   if (kind === 'train' && from && to) title = `${from} → ${to}`;
-  if (kind === 'flight' && from && to) title = `Flight ${from} → ${to}`;
+  if (kind === 'flight' && from && to) title = `Flight ${from.replace(/ \(.*$/, '')} → ${to.replace(/ \(.*$/, '')}`;
   if (kind === 'car') title = (lines.find((l) => /hertz|sixt|europcar|avis|enterprise/i.test(l)) || 'Car rental').slice(0, 50);
-  if (!title) title = fileName.replace(/\.(pdf|png|jpe?g|heic)$/i, '').replace(/[_-]+/g, ' ').slice(0, 60) || 'Booking';
+  if (!title) {
+    const base = fileName.replace(/\.(pdf|png|jpe?g|heic|webp|ics)$/i, '');
+    const generic = /^(img|image|screenshot|photo|scan|file|document|download)\b|^[0-9a-f-]{6,}\b|^\d+$/i.test(base);
+    title = generic ? '' : base.replace(/[_-]+/g, ' ').slice(0, 60);
+  }
 
   let endDate = '';
   if (kind === 'hotel' || kind === 'car') {
@@ -151,7 +200,7 @@ export function guessBooking(text, fileName = '', trip) {
     }
   }
 
-  return { kind, title, date: datePick, time, endDate, confirmation, seat, car, from, to, address, price, currency };
+  return { kind, title, date: datePick, time, endDate, confirmation, seat, car, from, to, address, price, currency, note };
 }
 
 // Calendar invites (.ics) from airlines and booking sites.
