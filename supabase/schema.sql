@@ -48,3 +48,16 @@ create policy "family files" on storage.objects
 
 -- Put your two email addresses here (yours and Mom's), then run again:
 -- insert into public.allowed_users (email) values ('you@example.com'), ('mom@example.com');
+
+-- Robust version of the access rules (ignores capital letters and stray spaces in emails).
+drop policy if exists "see own allow-list row" on public.allowed_users;
+create policy "see own allow-list row" on public.allowed_users for select to authenticated
+  using (lower(trim(email)) = lower(auth.jwt() ->> 'email'));
+drop policy if exists "family only" on public.records;
+create policy "family only" on public.records for all to authenticated
+  using (exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')))
+  with check (exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')));
+drop policy if exists "family files" on storage.objects;
+create policy "family files" on storage.objects for all to authenticated
+  using (bucket_id = 'trippin' and exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')))
+  with check (bucket_id = 'trippin' and exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')));
