@@ -59,17 +59,30 @@ export function useLive(fn, deps = [], initial = undefined) {
 export const alive = (rows) => (rows || []).filter((r) => !r.deleted);
 
 // Files: store bytes locally, metadata syncs; other devices download on demand.
+// File bytes are kept as plain data (more reliable on iPhone than storing the file object itself).
+export async function storeBytes(id, blob, type) {
+  const buf = await blob.arrayBuffer();
+  await db.blobs.put({ id, buf, type: type || blob.type || 'application/octet-stream', size: buf.byteLength });
+}
+export async function getBlob(id) {
+  const r = await db.blobs.get(id);
+  if (!r) return null;
+  if (r.buf) return new Blob([r.buf], { type: r.type });
+  if (r.blob) { try { const buf = await r.blob.arrayBuffer(); if (buf.byteLength) return new Blob([buf], { type: r.blob.type }); } catch (e) { /* unreadable */ } }
+  return null;
+}
+
 export async function saveFile(file, extra = {}) {
   const id = uid();
-  await db.blobs.put({ id, blob: file });
+  await storeBytes(id, file, file.type);
   await put('files', { id, name: file.name || 'file', type: file.type || 'application/octet-stream', size: file.size || 0, uploaded: 0, ...extra });
   return id;
 }
 
 export async function fileURL(id) {
   if (!id) return null;
-  const b = await db.blobs.get(id);
-  if (b && b.blob) return URL.createObjectURL(b.blob);
+  const b = await getBlob(id);
+  if (b && b.size) return URL.createObjectURL(b);
   const { downloadFile } = await import('./sync.js');
   const blob = await downloadFile(id);
   return blob ? URL.createObjectURL(blob) : null;

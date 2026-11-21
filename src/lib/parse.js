@@ -190,9 +190,9 @@ export function guessBooking(text, fileName = '', trip) {
   }
 
 
-  let address = lines.find((l) => /\d{4,5}\s+[A-ZÄÖÜ][a-zäöüé]+/.test(l) && /(str|gasse|weg|platz|rue|street|avenue|allee|strasse|straße)/i.test(l)) || '';
+  let address = kind === 'train' || kind === 'flight' ? '' : lines.find((l) => /\d{4,5}\s+[A-ZÄÖÜ][a-zäöüé]+/.test(l) && /(str|gasse|weg|platz|rue|street|avenue|allee|strasse|straße)/i.test(l)) || '';
 
-  if (!address) {
+  if (!address && (kind === 'hotel' || kind === 'car' || kind === 'event')) {
     const st = (text || '').match(/([A-ZÄÖÜ][\wäöüß-]*(?:strasse|straße|gasse|weg|platz|allee|ring|kai|street|road|avenue)|(?:rue|avenue|boulevard|place|quai) [\wéèàç' -]{2,30}?)\b[\s\S]{0,25}?\b(\d{1,4}[a-z]?)\b/i);
     if (st) {
       const pc = (text || '').slice(st.index, st.index + 80).match(/\b(\d{4,5})\b(?!\s*(?:miles|%))/);

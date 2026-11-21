@@ -109,7 +109,9 @@ export function TicketView({ id }) {
             <a class="btn btn-block" style={{ marginTop: '10px' }} href={url} target="_blank" rel="noopener"><Icon name="file" size={16} />Open full screen</a>
           </>
         ))}
-        {state === 'missing' && <div class="banner">The file is on another device and hasn't downloaded yet. Connect to the internet once and it will be saved here for offline.</div>}
+        {state === 'missing' && (file?.broken
+          ? <div class="banner">This file didn’t save properly on the phone it was added from. Tap the pencil above, or delete this ticket and add the file again.</div>
+          : <div class="banner">The file is on another device and hasn't downloaded yet. Connect to the internet once and it will be saved here for offline.</div>)}
         {state === 'loading' && <div class="empty">Opening…</div>}
       </div>
       {t.appLink && <a class="btn btn-primary btn-block" style={{ marginTop: '12px' }} href={t.appLink} target="_blank" rel="noopener"><Icon name="link" size={16} />Open in the rail/airline app</a>}

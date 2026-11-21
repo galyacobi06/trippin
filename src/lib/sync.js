@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { db, SYNCED, getKV, setKV } from './db.js';
+import { db, SYNCED, getKV, setKV, getBlob, storeBytes } from './db.js';
 
 // Sync between the 3 devices through a private Supabase project.
 // The app works fully without it (local only) until the account is connected.
@@ -136,15 +136,24 @@ async function pull(c) {
   }
 }
 
+// One bad file never blocks the rest of the sync: it's skipped and reported.
 async function uploadFiles(c) {
-  const pending = (await db.files.toArray()).filter((f) => !f.uploaded && !f.deleted);
+  const pending = (await db.files.toArray()).filter((f) => !f.uploaded && !f.deleted && !f.broken);
+  let lastError = null;
   for (const f of pending) {
-    const b = await db.blobs.get(f.id);
-    if (!b) continue;
-    const { error } = await c.storage.from('trippin').upload(f.id, b.blob, { upsert: true, contentType: f.type });
-    if (error) throw error;
-    await db.files.put({ ...f, uploaded: 1, updatedAt: Date.now(), dirty: 1 });
+    const blob = await getBlob(f.id);
+    if (!blob || !blob.size) {
+      // The bytes didn't survive on this device: mark it so the user can add it again.
+      if (await db.blobs.get(f.id)) await db.files.put({ ...f, broken: 1, updatedAt: Date.now(), dirty: 1 });
+      continue;
+    }
+    try {
+      const { error } = await c.storage.from('trippin').upload(f.id, blob, { upsert: true, contentType: f.type || blob.type });
+      if (error) throw error;
+      await db.files.put({ ...f, uploaded: 1, updatedAt: Date.now(), dirty: 1 });
+    } catch (e) { lastError = e; console.warn('upload failed', f.name, e); }
   }
+  if (lastError && /security|permission|denied/i.test(lastError.message || '')) throw lastError;
 }
 
 export async function downloadFile(id) {
@@ -152,7 +161,7 @@ export async function downloadFile(id) {
   if (!s || !navigator.onLine) return null;
   const { data, error } = await s.c.storage.from('trippin').download(id);
   if (error || !data) return null;
-  await db.blobs.put({ id, blob: data });
+  await storeBytes(id, data, data.type);
   return data;
 }
 
