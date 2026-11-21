@@ -27,6 +27,7 @@ export function Welcome() {
           <button class="btn btn-sm" style={{ marginTop: '10px' }} onClick={() => syncNow()}>Try again</button>
         </div>
       ) : <button class="btn btn-block" style={{ marginTop: '14px' }} onClick={() => open('signin')}>Already set up on another device? Sign in</button>}
+      <div class="muted small" style={{ textAlign: 'center', marginTop: '18px' }}>Version {__BUILD__}</div>
       {!custom ? <button class="btn btn-ghost btn-block" style={{ marginTop: '8px' }} onClick={() => setCustom(true)}>Start a different trip</button> : (
         <div class="card pad" style={{ marginTop: '14px' }}>
           <div class="field" style={{ marginTop: 0 }}><label for="wn">Trip name</label><input id="wn" class="input" value={f.name} onInput={(e) => setF({ ...f, name: e.currentTarget.value })} /></div>
