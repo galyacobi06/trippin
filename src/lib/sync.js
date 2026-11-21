@@ -33,12 +33,26 @@ export async function getClient() {
   return client;
 }
 
+// Plain-language explanations for the errors people actually hit.
+export function explain(e) {
+  const m = (e?.message || String(e || '')).toLowerCase();
+  if (/invalid login credentials/.test(m)) return 'Email or password is wrong. Check for a space at the end of the email, or set a new password in Supabase → Authentication → Users.';
+  if (/email not confirmed/.test(m)) return 'This account isn’t confirmed yet. In Supabase → Authentication → Users, open the user and confirm them (or recreate with “Auto Confirm User”).';
+  if (/row-level security|violates row|permission denied|42501/.test(m)) return 'Signed in, but this email isn’t on the allowed list. Add it in Supabase (allowed_users table) exactly as typed here.';
+  if (/could not find the table|relation .* does not exist|schema cache|42p01|pgrst205/.test(m)) return 'The database setup script hasn’t been run yet in Supabase (SQL Editor).';
+  if (/bucket not found/.test(m)) return 'The file storage isn’t set up: run the setup script in Supabase again.';
+  if (/failed to fetch|network|load failed/.test(m)) return 'Couldn’t reach the sync server. Check the internet connection and try again.';
+  if (/invalid api key|no api key|jwt/.test(m)) return 'The app’s sync key isn’t accepted. Tell Claude: “invalid API key”.';
+  return e?.message || String(e);
+}
+
 export async function signIn(email, password) {
   const c = await getClient();
   if (!c) throw new Error('Connect the sync account first.');
-  const { error } = await c.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  const { error } = await c.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  if (error) throw new Error(explain(error));
   await syncNow();
+  if (syncState.status === 'error') throw new Error(syncState.error);
 }
 
 export async function signOut() {
@@ -70,7 +84,7 @@ export async function syncNow() {
     prefetchFiles(s.c);
   } catch (e) {
     console.error(e);
-    syncState.status = 'error'; syncState.error = e.message || String(e);
+    syncState.status = 'error'; syncState.error = explain(e);
   } finally {
     running = false; emit();
   }

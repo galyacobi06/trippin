@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx';
 import { Header } from '../components/bits.jsx';
 import { useSyncState, syncLabel } from './Trip.jsx';
 import { getConfig, saveConfig, signIn, signOut, syncNow } from '../lib/sync.js';
-import { put, patch, getKV, setKV, useLive } from '../lib/db.js';
+import { put, patch, getKV, setKV, useLive, db, remove } from '../lib/db.js';
 import { setCurrentTrip, createTrip } from '../lib/trip.js';
 import { parseTakeoutCSV } from '../lib/services.js';
 import { downloadICS } from '../lib/ics.js';
@@ -63,7 +63,7 @@ export function Settings() {
             <div class="field"><label for="pw">Password</label><input id="pw" class="input" type="password" autocomplete="current-password" value={pw} onInput={(e) => setPw(e.currentTarget.value)} /></div>
             <button class="btn btn-primary btn-block" style={{ marginTop: '12px' }} disabled={busy || !email || !pw} onClick={async () => {
               setBusy(true);
-              try { if (cfg.url && cfg.key) await saveConfig(cfg.url, cfg.key); await signIn(email, pw); toast('Signed in, syncing'); } catch (e) { toast(e.message || 'Sign-in failed'); }
+              try { if (cfg.url && cfg.key) await saveConfig(cfg.url, cfg.key); await signIn(email, pw); toast('Signed in, syncing'); } catch (e) { alert(e.message || 'Sign-in failed'); }
               setBusy(false);
             }}>Sign in</button>
           </>
@@ -139,6 +139,15 @@ function TripEdit() {
         </div>
         <button class="btn btn-block" style={{ marginTop: '12px' }} disabled={!f.name || f.end < f.start} onClick={async () => { await patch('trips', data.trip.id, f); toast('Saved'); }}>Save trip</button>
       </div>
+      <button class="btn btn-ghost btn-block" style={{ marginTop: '10px', color: 'var(--accent-text)' }} onClick={async () => {
+        if (!confirm(`Delete "${data.trip.name}" (${data.trip.start} – ${data.trip.end}) with all its plans, tickets and expenses, on all devices?`)) return;
+        for (const tbl of ['days', 'items', 'places', 'tickets', 'expenses', 'packing']) {
+          for (const r of await db[tbl].where('tripId').equals(data.trip.id).toArray()) if (!r.deleted) await remove(tbl, r.id);
+        }
+        await remove('trips', data.trip.id);
+        toast('Trip deleted');
+        go('today');
+      }}>Delete this trip</button>
     </>
   );
 }
