@@ -41,7 +41,7 @@ export function Trip() {
     <div class="screen">
       <div class="between">
         <h1 class="h1">Trip</h1>
-        <button class="btn btn-sm" onClick={() => go('settings')}>{trips.length > 1 ? 'All trips' : 'Settings'}</button>
+        <button class="btn btn-sm" onClick={() => go('settings')}>Settings</button>
       </div>
       <div class="card navy" style={{ marginTop: '14px', overflow: 'hidden' }}>
         <Photo place={{ name: route[0] ? route.join(' ') : trip.name, city: route[1] || route[0] || '', kind: 'route', photo: trip.photo, id: trip.id, _table: 'trips', photoFile: trip.photoFile }} height={150} />
