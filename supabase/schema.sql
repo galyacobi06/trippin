@@ -61,3 +61,21 @@ drop policy if exists "family files" on storage.objects;
 create policy "family files" on storage.objects for all to authenticated
   using (bucket_id = 'trippin' and exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')))
   with check (bucket_id = 'trippin' and exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email')));
+
+-- Newer Supabase projects don't give the app's logged-in users access to new tables automatically.
+-- The allow-list check runs as a trusted function, and the app gets access to the records table.
+create or replace function public.is_family() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.allowed_users a where lower(trim(a.email)) = lower(auth.jwt() ->> 'email'));
+$$;
+revoke all on function public.is_family() from public;
+grant execute on function public.is_family() to authenticated;
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.records to authenticated;
+
+drop policy if exists "family only" on public.records;
+create policy "family only" on public.records for all to authenticated
+  using (public.is_family()) with check (public.is_family());
+drop policy if exists "family files" on storage.objects;
+create policy "family files" on storage.objects for all to authenticated
+  using (bucket_id = 'trippin' and public.is_family()) with check (bucket_id = 'trippin' and public.is_family());
