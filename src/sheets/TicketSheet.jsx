@@ -5,6 +5,7 @@ import { Sheet, Chips, Field } from './Sheets.jsx';
 import { put, saveFile, db } from '../lib/db.js';
 import { pdfText, guessBooking, icsText } from '../lib/parse.js';
 import { readImages } from '../lib/ocr.js';
+import { aiRead } from '../lib/ai.js';
 import { getRates, toEUR } from '../lib/services.js';
 import { KINDS, BOOKING_KINDS, dateRange, localCurrency } from '../lib/util.js';
 import { dayInfo, attachTicketToPlan, importBookings } from '../lib/trip.js';
@@ -31,7 +32,10 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
       const fileIds = [];
       for (const x of picked) fileIds.push(await saveFile(x));
       let guess = {};
-      try {
+      setProgress('Reading with the smart reader…');
+      const smart = await aiRead({ images: picked, trip });
+      if (smart) { guess = smart; setReadText('Read by the smart reader (Google Gemini).'); }
+      else try {
         setProgress('Getting the reader ready…');
         const text = await readImages(picked, (m) => setProgress(m.status === 'recognizing text' ? `Reading… ${Math.round((m.progress || 0) * 100)}%` : (m.status || '').startsWith('Reading') ? m.status : 'Getting the reader ready…'));
         setReadText(text);
@@ -71,7 +75,12 @@ export function TicketSheet({ ticket, date, kind, itemId }) {
     }
     const fileId = await saveFile(file);
     if (/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)) {
-      try { const txt = await pdfText(file); setReadText(txt); guess = guessBooking(txt, file.name, trip); } catch (err) { console.warn(err); guess = guessBooking('', file.name, trip); }
+      try {
+        const txt = await pdfText(file); setReadText(txt);
+        setProgress('Reading…');
+        const smart = txt.trim().length > 40 ? await aiRead({ text: txt, trip }) : null;
+        guess = smart || guessBooking(txt, file.name, trip);
+      } catch (err) { console.warn(err); guess = guessBooking('', file.name, trip); }
     } else guess = guessBooking('', file.name, trip);
     const merged = { ...f, ...Object.fromEntries(Object.entries(guess).filter(([, v]) => v)), fileId, fileName: file.name };
     if (kind) merged.kind = kind;

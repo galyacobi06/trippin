@@ -28,11 +28,13 @@ const MONTHS = {
   jan: 1, january: 1, januar: 1, janvier: 1, jänner: 1, feb: 2, february: 2, februar: 2, février: 2, fevrier: 2,
   mar: 3, march: 3, märz: 3, maerz: 3, mars: 3, apr: 4, april: 4, avril: 4, may: 5, mai: 5, jun: 6, june: 6, juni: 6, juin: 6,
   jul: 7, july: 7, juli: 7, juillet: 7, aug: 8, august: 8, août: 8, aout: 8, sep: 9, sept: 9, september: 9, septembre: 9,
+  ינו: 1, ינואר: 1, פבר: 2, פברואר: 2, מרץ: 3, אפר: 4, אפריל: 4, מאי: 5, יונ: 6, יוני: 6, יול: 7, יולי: 7, אוג: 8, אוגוסט: 8, ספט: 9, ספטמבר: 9, אוק: 10, אוקטובר: 10, נוב: 11, נובמבר: 11, דצמ: 12, דצמבר: 12,
   oct: 10, october: 10, oktober: 10, okt: 10, octobre: 10, nov: 11, november: 11, novembre: 11, dec: 12, december: 12, dezember: 12, dez: 12, décembre: 12, decembre: 12
 };
 const p2 = (n) => String(n).padStart(2, '0');
 
 export function findDates(text, defaultYear) {
+  text = (text || '').replace(/([\u05D0-\u05EA])['"׳״]/g, '$1'); // Hebrew abbreviations: דצמ' → דצמ
   const found = [];
   const add = (y, m, d, idx) => {
     y = Number(y); if (y < 100) y += 2000;
@@ -44,7 +46,7 @@ export function findDates(text, defaultYear) {
   while ((m = r1.exec(text))) add(m[1], m[2], m[3], m.index);
   const r2 = /\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b/g;
   while ((m = r2.exec(text))) add(m[3], m[2], m[1], m.index);
-  const r3 = /\b(\d{1,2})\.?\s+([A-Za-zäéû]{3,10})\.?,?\s+(\d{4})\b/g;
+  const r3 = /(?<![\d])(\d{1,2})\.?\s+([A-Za-zäéû\u05D0-\u05EA]{3,10})\.?,?\s+(\d{4})\b/g;
   while ((m = r3.exec(text))) { const mo = MONTHS[m[2].toLowerCase()]; if (mo) add(m[3], mo, m[1], m.index); }
   const r4 = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b/g;
   while ((m = r4.exec(text))) { const mo = MONTHS[m[1].toLowerCase()]; if (mo) add(m[3], mo, m[2], m.index); }
@@ -74,6 +76,7 @@ const AIRPORTS = {
   HKT: 'Phuket', CNX: 'Chiang Mai', USM: 'Koh Samui', SIN: 'Singapore', HKG: 'Hong Kong', NRT: 'Tokyo', HND: 'Tokyo', DEL: 'Delhi', BOM: 'Mumbai', ETM: 'Eilat'
 };
 const AIRLINES = { OS: 'Austrian Airlines', LX: 'SWISS', LH: 'Lufthansa', LY: 'El Al', TG: 'Thai Airways', AF: 'Air France', KL: 'KLM', BA: 'British Airways', IZ: 'Arkia', '6H': 'Israir', U2: 'easyJet', FR: 'Ryanair', W6: 'Wizz Air', TK: 'Turkish Airlines', EK: 'Emirates', QR: 'Qatar Airways', EY: 'Etihad' };
+const HEB_CITY = { 'תל אביב': 'TLV', 'נתב"ג': 'TLV', 'פריז': 'CDG', 'וינה': 'VIE', 'בנגקוק': 'BKK', 'ציריך': 'ZRH', 'ז\'נבה': 'GVA', 'מינכן': 'MUC', 'פרנקפורט': 'FRA', 'לונדון': 'LHR', 'רומא': 'FCO', 'מילאנו': 'MXP', 'ברצלונה': 'BCN', 'אתונה': 'ATH', 'לרנקה': 'LCA', 'אילת': 'ETM', 'ברלין': 'BER', 'פראג': 'PRG', 'בודפשט': 'BUD', 'אמסטרדם': 'AMS', 'דובאי': 'DXB', 'ניו יורק': 'JFK', 'זלצבורג': 'SZG', 'שטרסבורג': 'SXB' };
 export const airportCity = (code) => AIRPORTS[(code || '').toUpperCase()] || '';
 
 // Apps often show labels on one line and their values on the next ("Flight  Booking Ref.  Class" / "TG933  5M9P7O  Business").
@@ -97,27 +100,46 @@ export function guessBooking(text, fileName = '', trip) {
   const t = (text || '').toLowerCase();
   const f = fileName.toLowerCase();
   let kind = 'event';
-  if (has(t + f, ['öbb', 'oebb', 'sbb', 'cff', 'sncf', 'tgv', 'railjet', 'nightjet', 'deutsche bahn', 'trainline', 'ouigo', 'lyria', 'westbahn', ' ice ', 'wagen', 'voiture', 'coach ', 'gleis', 'platform', 'zug', 'train'])) kind = 'train';
+  if (has(t + f, ['רכבת', 'קרון', 'öbb', 'oebb', 'sbb', 'cff', 'sncf', 'tgv', 'railjet', 'nightjet', 'deutsche bahn', 'trainline', 'ouigo', 'lyria', 'westbahn', ' ice ', 'wagen', 'voiture', 'coach ', 'gleis', 'platform', 'zug', 'train'])) kind = 'train';
   if (has(t + f, ['hertz', 'sixt', 'europcar', 'avis', 'enterprise', 'budget rent', 'car rental', 'rental car', 'mietwagen', 'pick-up', 'pickup location'])) kind = 'car';
-  if (has(t + f, ['booking.com', 'airbnb', 'check-in', 'check in', 'check-out', 'hotel', 'night', 'nächte', 'nuits', 'guest', 'room'])) kind = kind === 'train' && !has(t, ['hotel', 'booking.com', 'airbnb']) ? kind : 'hotel';
-  if (has(t + f, ['boarding', 'flight', 'gate', 'airline', 'el al', 'austrian airlines', 'lufthansa', 'swiss international', 'easyjet', 'ryanair', 'wizz'])) kind = 'flight';
+  if (has(t + f, ['מלון', 'צ\'ק אאוט', 'לילות', 'booking.com', 'airbnb', 'check-in', 'check in', 'check-out', 'hotel', 'night', 'nächte', 'nuits', 'guest', 'room'])) kind = kind === 'train' && !has(t, ['hotel', 'booking.com', 'airbnb']) ? kind : 'hotel';
+  if (has(t + f, ['טיסה', 'הטיסה', 'שער עלייה', 'כרטיס עלייה', 'אל על', 'boarding', 'flight', 'gate', 'airline', 'el al', 'austrian airlines', 'lufthansa', 'swiss international', 'easyjet', 'ryanair', 'wizz'])) kind = 'flight';
 
   const year = trip?.start ? Number(trip.start.slice(0, 4)) : new Date().getFullYear();
   const dates = findDates(text || '', year);
-  const inTrip = dates.filter((d) => !trip?.start || (d.date >= trip.start && d.date <= (trip.end || '9999')));
+  const within = (d) => !trip?.start || (d >= trip.start && d <= (trip.end || '9999'));
+  // Screenshot readers often drop a leading "1" ("15 Dec" → "5 Dec"): fix it when that lands inside the trip.
+  for (const d of dates) {
+    if (within(d.date)) continue;
+    const day = Number(d.date.slice(8));
+    const fixed = day < 10 ? d.date.slice(0, 8) + String(day + 10) : null;
+    if (fixed && within(fixed) && !dates.some((x) => within(x.date))) d.date = fixed;
+  }
+  const inTrip = dates.filter((d) => within(d.date));
   const datePick = (inTrip[0] || dates[0])?.date || '';
-  const times = findTimes(text || '');
+  const rawLines = (text || '').split('\n');
+  const statusClock = (rawLines.slice(0, 2).join(' ').match(/\b(\d{1,2}:\d{2})\b/) || [])[1];
+  const times = findTimes(text || '').filter((x) => {
+    const line = rawLines.find((l) => l.includes(x.time)) || '';
+    return x.time !== statusClock && !/°/.test(line) && !/opens in|נפתח|יפתח/i.test(line);
+  });
 
   let confirmation = '';
   const spaced = (text || '').match(/(?:buchungscode|booking code|booking reference|confirmation (?:number|code)|reference code|reservation (?:number|code)|pnr)\s*[:#]?\s*(\d{3,4}(?: \d{3,4}){1,5})\b/i);
   const cm = (text || '').match(/(?:confirmation|booking|reservation|buchungs|order|pnr|dossier|référence|reference|auftrags)[\s-]*(?:number|no\.?|nr\.?|code|nummer|reference|ref\.?|id|#)?\s*[:#]?\s*((?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,19})/i);
-  if (spaced) confirmation = spaced[1];
+  const heb = (text || '').match(/(?:מס['׳]?\s*הזמנה|מספר הזמנה|קוד הזמנה|אסמכתא|מספר אישור)\s*[:#]?\s*[\u200e\u200f]?([A-Z0-9]{5,10})/);
+  if (heb) confirmation = heb[1];
+  else if (spaced) confirmation = spaced[1];
   else if (cm) confirmation = cm[1];
 
   let seat = ((text || '').match(/(?:seat|sitzplatz|platz|place|siège)\s*:?\s*(\d{1,3}[A-Z]?)/i) || [])[1] || '';
   let car = ((text || '').match(/(?:coach|car|wagen|voiture)\s*:?\s*(\d{1,3})\b/i) || [])[1] || '';
   const fno = (text || '').match(/flight (?:number|no\.?)\s*:?\s*([A-Z0-9]{2}\s?\d{2,4})/i);
   if (fno) car = fno[1];
+  if (!car || /^\d+$/.test(car)) {
+    const anyF = (text || '').match(new RegExp('\\b(' + Object.keys(AIRLINES).join('|') + ')\\s?(\\d{2,4})\\b'));
+    if (anyF && (kind === 'flight' || /\b[A-Z]{3}\b/.test(text))) car = anyF[1] + anyF[2];
+  }
 
   let from = '', to = '';
   const arrow = (text || '').match(/([A-ZÄÖÜ][\wäöüéèßÄÖÜ .'-]{2,40}?)(?:\s*\([^)\n]*)?\s*(?:→|->|–>|—|›|»|>)\s*([A-ZÄÖÜ][\wäöüéèß .'-]{2,40})/);
@@ -139,12 +161,24 @@ export function guessBooking(text, fileName = '', trip) {
     // Airport codes, e.g. "CDG ... BKK".
     const codes = [];
     for (const l of lines) for (const m2 of l.matchAll(/\b([A-Z]{3})\b/g)) if (AIRPORTS[m2[1]] && !codes.includes(m2[1])) codes.push(m2[1]);
-    if (codes.length >= 2 && (!from || !to || /^[A-Z]{3}$/.test(from))) { from = `${AIRPORTS[codes[0]]} (${codes[0]})`; to = `${AIRPORTS[codes[1]]} (${codes[1]})`; }
+    for (const [name, code] of Object.entries(HEB_CITY)) if ((text || '').includes(name) && !codes.includes(code) && codes.length < 2 && !codes.some((c) => AIRPORTS[c] === AIRPORTS[code])) codes.push(code);
+    const isHeb = /[\u05D0-\u05EA]{3,}/.test(text || '');
+    // In Hebrew apps "TLV ← CDG" reads right to left: from Paris to Tel Aviv.
+    const pairLine = lines.find((l) => { const c = l.match(/\b[A-Z]{3}\b/g) || []; return c.filter((x) => AIRPORTS[x]).length >= 2; });
+    if (pairLine && codes.length >= 2) {
+      const c = pairLine.match(/\b[A-Z]{3}\b/g).filter((x) => AIRPORTS[x]);
+      codes.splice(0, codes.length, ...(isHeb || /←/.test(pairLine) ? [c[1], c[0]] : [c[0], c[1]]));
+    }
+    // "to Tel Aviv" / "לתל אביב" settles which one is the destination.
+    const dest = codes.find((c) => new RegExp('(?:\\bto\\s+|ל)' + Object.entries(HEB_CITY).filter(([, v]) => v === c).map(([k]) => k).concat(AIRPORTS[c]).join('|(?:\\bto\\s+|ל)'), 'i').test(text || ''));
+    if (dest && codes.length >= 2 && codes[0] === dest) codes.reverse();
+    if (codes.length >= 2 && (!from || !to || /^[A-Z]{3}$/.test(from) || isHeb)) { from = `${AIRPORTS[codes[0]]} (${codes[0]})`; to = `${AIRPORTS[codes[1]]} (${codes[1]})`; }
     else if (/^[A-Z]{3}$/.test(from) && AIRPORTS[from]) { from = `${AIRPORTS[from]} (${from})`; if (AIRPORTS[to]) to = `${AIRPORTS[to]} (${to})`; }
     const term = (text || '').match(/terminal\s*:?\s*([0-9A-Z]{1,2})\b/i);
     if (term && from && !/terminal/i.test(from)) from += `, Terminal ${term[1]}`;
     const airline = AIRLINES[(car.match(/^([A-Z0-9]{2})/) || [])[1]];
-    const arr = (text || '').match(/(?:arrival|arrives?|lands?)[\s\S]{0,60}?\b(\d{1,2}:\d{2})\b/i);
+    let arr = (text || '').match(/(?:arrival|arrives?|lands?)[\s\S]{0,60}?\b(\d{1,2}:\d{2})\b/i);
+    if (!arr && times[1]) arr = [null, times[1].time];
     note = [airline && `${airline} ${car}`, col.class && col.class + ' class', arr && 'lands ' + arr[1]].filter(Boolean).join(' · ');
     if (kind !== 'flight') kind = 'flight';
   }

@@ -7,7 +7,7 @@ async function getWorker() {
   if (!workerP) {
     const { createWorker } = await import('tesseract.js');
     const base = new URL('./ocr/', document.baseURI).href;
-    workerP = createWorker('eng', 1, {
+    workerP = createWorker(['eng', 'heb'], 1, {
       workerPath: base + 'worker.min.js',
       corePath: base,
       langPath: base + 'lang',

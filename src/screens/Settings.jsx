@@ -18,6 +18,7 @@ export function Settings() {
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const usd = useLive(() => getKV('showUSD', true), [], true);
+  const ai = useLive(() => getKV('aiReading', true), [], true);
   useEffect(() => { getConfig().then(setCfg); }, []);
 
   const importCSV = async (e) => {
@@ -68,6 +69,15 @@ export function Settings() {
             }}>Sign in</button>
           </>
         )}
+      </div>
+
+      <div class="eyebrow" style={{ margin: '20px 4px 8px' }}>Reading bookings</div>
+      <div class="card pad">
+        <label class="between" style={{ minHeight: '44px' }}>
+          <span>Smart reader (Google Gemini)</span>
+          <input type="checkbox" class="check" checked={ai} onChange={(e) => setKV('aiReading', e.currentTarget.checked)} />
+        </label>
+        <div class="muted small">Much more accurate with screenshots in any language. Screenshots go to Google to be read (free tier, which Google may use to improve its products). Off = read only on this phone.</div>
       </div>
 
       <div class="eyebrow" style={{ margin: '20px 4px 8px' }}>Money</div>
