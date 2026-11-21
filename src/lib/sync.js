@@ -75,16 +75,17 @@ export async function syncNow() {
   const s = await session();
   if (!s) { syncState.status = (await getClient()) ? 'signed-out' : 'off'; emit(); return; }
   running = true;
+  let step = '';
   syncState.status = 'syncing'; syncState.email = s.user.email; syncState.error = null; emit();
   try {
-    await uploadFiles(s.c);
-    await push(s.c);
-    await pull(s.c);
+    step = 'uploading files'; await uploadFiles(s.c);
+    step = 'sending changes'; await push(s.c);
+    step = 'downloading changes'; await pull(s.c);
     syncState.status = 'ok'; syncState.last = Date.now();
     prefetchFiles(s.c);
   } catch (e) {
     console.error(e);
-    syncState.status = 'error'; syncState.error = explain(e);
+    syncState.status = 'error'; syncState.error = `${explain(e)} (while ${step}: ${e?.message || e})`;
   } finally {
     running = false; emit();
   }
